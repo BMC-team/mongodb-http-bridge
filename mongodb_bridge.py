@@ -44,8 +44,33 @@ from bson.errors import InvalidId
 app = Flask(__name__)
 
 # Configuration
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.environ.get("MONGO_URI", None)
 API_KEY = os.environ.get("API_KEY", None)
+
+# Interactive configuration if MONGO_URI not set
+if not MONGO_URI:
+    print("\n" + "="*60)
+    print("MongoDB Connection Setup")
+    print("="*60)
+    
+    mongo_host = input("MongoDB host [localhost]: ").strip() or "localhost"
+    mongo_port = input("MongoDB port [27017]: ").strip() or "27017"
+    mongo_user = input("MongoDB username (leave empty if none): ").strip()
+    mongo_pass = ""
+    if mongo_user:
+        mongo_pass = input("MongoDB password: ").strip()
+    mongo_db = input("Authentication database (leave empty for default): ").strip()
+    
+    if mongo_user and mongo_pass:
+        if mongo_db:
+            MONGO_URI = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/{mongo_db}"
+        else:
+            MONGO_URI = f"mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}"
+    else:
+        MONGO_URI = f"mongodb://{mongo_host}:{mongo_port}"
+    
+    print(f"\nUsing MongoDB URI: {MONGO_URI.replace(mongo_pass, '****') if mongo_pass else MONGO_URI}")
+    print("="*60 + "\n")
 
 # Generate a random API key if not provided
 if not API_KEY:
