@@ -123,7 +123,10 @@ def index():
         "auth_required": True,
         "endpoints": [
             "GET  /databases",
+            "GET  /databases/available  (shard-aware)",
             "GET  /databases/<db>/collections",
+            "GET  /databases/<db>/collections/available  (shard-aware)",
+            "GET  /shards  (list shards and status)",
             "POST /query",
             "POST /aggregate",
             "POST /insert",
@@ -518,6 +521,240 @@ def list_indexes(db, collection):
         })
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/shards", methods=["GET"])
+@require_api_key
+def list_shards():
+    """
+    List all shards and their status.
+    Queries config.shards and tests connectivity to each shard.
+    """
+    try:
+        client = get_client()
+        config_db = client["config"]
+        
+        # Get shard information from config database
+        shards_collection = config_db["shards"]
+        shards = list(shards_collection.find({}))
+        
+        shard_status = []
+        for shard in shards:
+            shard_info = {
+                "id": shard.get("_id"),
+                "host": shard.get("host"),
+                "state": shard.get("state", 1),
+                "online": False,
+                "error": None
+            }
+            
+            # Try to connect to this shard directly
+            try:
+                # Parse the shard host string (format: "replicaSetName/host1:port,host2:port")
+                host_str = shard.get("host", "")
+                if "/" in host_str:
+                    rs_name, hosts = host_str.split("/", 1)
+                else:
+                    hosts = host_str
+                
+                # Get first host for testing
+                first_host = hosts.split(",")[0]
+                
+                # Build connection string for this shard
+                # Extract credentials from main URI if available
+                main_uri = MONGO_URI
+                shard_uri = f"mongodb://{first_host}/?directConnection=true&serverSelectionTimeoutMS=3000"
+                
+                # Add auth if present in main URI
+                if "@" in main_uri:
+                    # Extract credentials
+                    creds_part = main_uri.split("@")[0].replace("mongodb://", "")
+                    shard_uri = f"mongodb://{creds_part}@{first_host}/?directConnection=true&serverSelectionTimeoutMS=3000&authSource=admin"
+                
+                # Test connection
+                test_client = MongoClient(shard_uri)
+                test_client.admin.command("ping")
+                shard_info["online"] = True
+                test_client.close()
+                
+            except Exception as e:
+                shard_info["online"] = False
+                shard_info["error"] = str(e)
+            
+            shard_status.append(shard_info)
+        
+        return jsonify({
+            "total_shards": len(shard_status),
+            "online_shards": sum(1 for s in shard_status if s["online"]),
+            "offline_shards": sum(1 for s in shard_status if not s["online"]),
+            "shards": serialize_response(shard_status)
+        })
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error: {str(e)}"}), 400
+
+
+@app.route("/databases/available", methods=["GET"])
+@require_api_key
+def list_available_databases():
+    """
+    List databases from online shards only.
+    Skips unavailable shards instead of failing.
+    """
+    try:
+        client = get_client()
+        config_db = client["config"]
+        
+        # Get shard information
+        shards = list(config_db["shards"].find({}))
+        
+        all_databases = {}
+        shard_results = []
+        
+        for shard in shards:
+            shard_id = shard.get("_id")
+            host_str = shard.get("host", "")
+            
+            shard_result = {
+                "shard_id": shard_id,
+                "online": False,
+                "databases": [],
+                "error": None
+            }
+            
+            try:
+                # Parse host string
+                if "/" in host_str:
+                    rs_name, hosts = host_str.split("/", 1)
+                else:
+                    hosts = host_str
+                
+                first_host = hosts.split(",")[0]
+                
+                # Build shard connection string
+                main_uri = MONGO_URI
+                shard_uri = f"mongodb://{first_host}/?directConnection=true&serverSelectionTimeoutMS=3000"
+                
+                if "@" in main_uri:
+                    creds_part = main_uri.split("@")[0].replace("mongodb://", "")
+                    shard_uri = f"mongodb://{creds_part}@{first_host}/?directConnection=true&serverSelectionTimeoutMS=3000&authSource=admin"
+                
+                # Connect and list databases
+                shard_client = MongoClient(shard_uri)
+                dbs = shard_client.list_database_names()
+                
+                shard_result["online"] = True
+                shard_result["databases"] = dbs
+                
+                # Merge into all_databases
+                for db_name in dbs:
+                    if db_name not in all_databases:
+                        all_databases[db_name] = {"name": db_name, "shards": []}
+                    all_databases[db_name]["shards"].append(shard_id)
+                
+                shard_client.close()
+                
+            except Exception as e:
+                shard_result["online"] = False
+                shard_result["error"] = str(e)
+            
+            shard_results.append(shard_result)
+        
+        # Also get databases from config server
+        try:
+            config_dbs = ["admin", "config", "local"]
+            for db_name in config_dbs:
+                if db_name not in all_databases:
+                    all_databases[db_name] = {"name": db_name, "shards": ["config"]}
+        except:
+            pass
+        
+        return jsonify({
+            "total_shards": len(shards),
+            "online_shards": sum(1 for s in shard_results if s["online"]),
+            "databases": list(all_databases.values()),
+            "shard_details": shard_results
+        })
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error: {str(e)}"}), 400
+
+
+@app.route("/databases/<db>/collections/available", methods=["GET"])
+@require_api_key
+def list_available_collections(db):
+    """
+    List collections in a database from online shards only.
+    """
+    try:
+        client = get_client()
+        config_db = client["config"]
+        
+        # Get shard information
+        shards = list(config_db["shards"].find({}))
+        
+        all_collections = set()
+        shard_results = []
+        
+        for shard in shards:
+            shard_id = shard.get("_id")
+            host_str = shard.get("host", "")
+            
+            shard_result = {
+                "shard_id": shard_id,
+                "online": False,
+                "collections": [],
+                "error": None
+            }
+            
+            try:
+                if "/" in host_str:
+                    rs_name, hosts = host_str.split("/", 1)
+                else:
+                    hosts = host_str
+                
+                first_host = hosts.split(",")[0]
+                
+                main_uri = MONGO_URI
+                shard_uri = f"mongodb://{first_host}/?directConnection=true&serverSelectionTimeoutMS=3000"
+                
+                if "@" in main_uri:
+                    creds_part = main_uri.split("@")[0].replace("mongodb://", "")
+                    shard_uri = f"mongodb://{creds_part}@{first_host}/?directConnection=true&serverSelectionTimeoutMS=3000&authSource=admin"
+                
+                shard_client = MongoClient(shard_uri)
+                
+                # Check if database exists on this shard
+                if db in shard_client.list_database_names():
+                    collections = shard_client[db].list_collection_names()
+                    shard_result["online"] = True
+                    shard_result["collections"] = collections
+                    all_collections.update(collections)
+                else:
+                    shard_result["online"] = True
+                    shard_result["collections"] = []
+                
+                shard_client.close()
+                
+            except Exception as e:
+                shard_result["online"] = False
+                shard_result["error"] = str(e)
+            
+            shard_results.append(shard_result)
+        
+        return jsonify({
+            "database": db,
+            "collections": sorted(list(all_collections)),
+            "total_shards": len(shards),
+            "online_shards": sum(1 for s in shard_results if s["online"]),
+            "shard_details": shard_results
+        })
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error: {str(e)}"}), 400
 
 
 @app.route("/sample", methods=["POST"])
