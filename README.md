@@ -25,16 +25,35 @@ curl -O https://raw.githubusercontent.com/BMC-team/mongodb-http-bridge/main/mong
 # 2. Install dependencies
 pip install flask pymongo
 
-# 3. Run (will auto-generate API key)
+# 3. Run (will prompt for MongoDB settings and auto-generate API key)
 sudo python3 mongodb_bridge.py --port 80
 ```
 
+## Interactive Setup
+
+When you run the script, it will ask for your MongoDB connection settings:
+
+```
+============================================================
+MongoDB Connection Setup
+============================================================
+MongoDB host [localhost]: 
+MongoDB port [27017]: 2071
+MongoDB username (leave empty if none): 
+Authentication database (leave empty for default): 
+
+Using MongoDB URI: mongodb://localhost:2071
+============================================================
+```
+
+You can skip the prompts by setting environment variables (see Configuration section).
+
 ## Configuration
 
-### Environment Variables
+### Environment Variables (Optional - Skip Interactive Prompts)
 ```bash
-export API_KEY="your-secret-key"              # Optional: auto-generated if not set
-export MONGO_URI="mongodb://localhost:27017"  # Optional: default is localhost
+export MONGO_URI="mongodb://localhost:27017"  # Skip connection prompts
+export API_KEY="your-secret-key"              # Skip auto-generation
 ```
 
 ### Command Line Options
