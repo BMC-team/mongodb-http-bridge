@@ -1,28 +1,26 @@
 # MongoDB HTTP Bridge
 
-یک پل REST API امن برای دسترسی به MongoDB از طریق HTTP.
+A secure REST API bridge for accessing MongoDB over HTTP. Designed to enable remote database access when direct MongoDB connections are not possible (firewalls, proxies, etc.).
 
-A secure REST API bridge for accessing MongoDB over HTTP. Designed to enable remote database access when direct MongoDB connections aren't possible (firewalls, proxies, etc.).
+## Features
 
-## ✨ Features
+- API Key Authentication - All requests require authentication
+- HTTPS Support - Optional SSL/TLS encryption
+- Full MongoDB Access - Query, aggregate, insert, update, delete
+- Zero Configuration - Auto-generates API key if not set
+- Single File - No complex setup required
 
-- 🔐 **API Key Authentication** - All requests require authentication
-- 🔒 **HTTPS Support** - Optional SSL/TLS encryption
-- 📊 **Full MongoDB Access** - Query, aggregate, insert, update, delete
-- 🚀 **Zero Configuration** - Auto-generates API key if not set
-- 📦 **Single File** - No complex setup required
-
-## 🚀 Quick Install
+## Quick Install
 
 ### One-Line Install
 ```bash
-curl -fsSL https://raw.githubusercontent.com/BMCprogram/mongodb-http-bridge/main/mongodb_bridge.py -o mongodb_bridge.py && pip install flask pymongo && sudo python3 mongodb_bridge.py
+curl -fsSL https://raw.githubusercontent.com/BMC-team/mongodb-http-bridge/main/mongodb_bridge.py -o mongodb_bridge.py && pip install flask pymongo && sudo python3 mongodb_bridge.py
 ```
 
 ### Step by Step
 ```bash
 # 1. Download
-curl -O https://raw.githubusercontent.com/BMCprogram/mongodb-http-bridge/main/mongodb_bridge.py
+curl -O https://raw.githubusercontent.com/BMC-team/mongodb-http-bridge/main/mongodb_bridge.py
 
 # 2. Install dependencies
 pip install flask pymongo
@@ -31,11 +29,11 @@ pip install flask pymongo
 sudo python3 mongodb_bridge.py --port 80
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 ### Environment Variables
 ```bash
-export API_KEY="your-secret-key"           # Optional: auto-generated if not set
+export API_KEY="your-secret-key"              # Optional: auto-generated if not set
 export MONGO_URI="mongodb://localhost:27017"  # Optional: default is localhost
 ```
 
@@ -60,24 +58,24 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 sudo python3 mongodb_bridge.py --port 443 --ssl
 ```
 
-## 📡 API Endpoints
+## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/` | Health check (no auth required) |
-| `GET` | `/databases` | List all databases |
-| `GET` | `/databases/<db>/collections` | List collections |
-| `POST` | `/query` | Find documents |
-| `POST` | `/aggregate` | Run aggregation pipeline |
-| `POST` | `/insert` | Insert documents |
-| `POST` | `/update` | Update documents |
-| `POST` | `/delete` | Delete documents |
-| `POST` | `/command` | Run raw MongoDB command |
-| `POST` | `/sample` | Get random documents |
-| `GET` | `/collection/<db>/<coll>/count` | Document count |
-| `GET` | `/collection/<db>/<coll>/indexes` | List indexes |
+| GET | / | Health check (no auth required) |
+| GET | /databases | List all databases |
+| GET | /databases/<db>/collections | List collections |
+| POST | /query | Find documents |
+| POST | /aggregate | Run aggregation pipeline |
+| POST | /insert | Insert documents |
+| POST | /update | Update documents |
+| POST | /delete | Delete documents |
+| POST | /command | Run raw MongoDB command |
+| POST | /sample | Get random documents |
+| GET | /collection/<db>/<coll>/count | Document count |
+| GET | /collection/<db>/<coll>/indexes | List indexes |
 
-## 📝 Usage Examples
+## Usage Examples
 
 ### List Databases
 ```bash
@@ -155,7 +153,7 @@ curl -X POST http://localhost/delete \
   }'
 ```
 
-## 🔧 Run as Service (systemd)
+## Run as Service (systemd)
 
 ```bash
 sudo tee /etc/systemd/system/mongodb-bridge.service << 'EOF'
@@ -180,14 +178,14 @@ sudo systemctl enable mongodb-bridge
 sudo systemctl start mongodb-bridge
 ```
 
-## 🛡️ Security Recommendations
+## Security Recommendations
 
-1. **Use HTTPS** in production
-2. **Set a strong API key** via environment variable
-3. **Use firewall rules** to restrict access
-4. **Run behind nginx** for additional security features
-5. **Don't expose to public internet** without proper security
+1. Use HTTPS in production
+2. Set a strong API key via environment variable
+3. Use firewall rules to restrict access
+4. Run behind nginx for additional security features
+5. Do not expose to public internet without proper security
 
-## 📜 License
+## License
 
 MIT License - Use freely!
