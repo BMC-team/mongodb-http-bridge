@@ -757,6 +757,207 @@ def list_available_collections(db):
         return jsonify({"error": f"Error: {str(e)}"}), 400
 
 
+@app.route("/shard/<shard_id>/query", methods=["POST"])
+@require_api_key
+def query_shard(shard_id):
+    """
+    Query a specific shard directly, bypassing mongos.
+    Useful when other shards are unavailable.
+    
+    Request body:
+    {
+        "database": "mydb",
+        "collection": "mycollection",
+        "filter": {"field": "value"},
+        "projection": {"field": 1},
+        "sort": [["field", 1]],
+        "limit": 100,
+        "skip": 0
+    }
+    """
+    try:
+        client = get_client()
+        config_db = client["config"]
+        
+        # Find the shard
+        shard = config_db["shards"].find_one({"_id": shard_id})
+        if not shard:
+            return jsonify({"error": f"Shard '{shard_id}' not found"}), 404
+        
+        host_str = shard.get("host", "")
+        
+        # Parse host string
+        if "/" in host_str:
+            rs_name, hosts = host_str.split("/", 1)
+        else:
+            hosts = host_str
+        
+        first_host = hosts.split(",")[0]
+        
+        # Build shard connection string
+        main_uri = MONGO_URI
+        shard_uri = f"mongodb://{first_host}/?directConnection=true&serverSelectionTimeoutMS=5000"
+        
+        if "@" in main_uri:
+            creds_part = main_uri.split("@")[0].replace("mongodb://", "")
+            shard_uri = f"mongodb://{creds_part}@{first_host}/?directConnection=true&serverSelectionTimeoutMS=5000&authSource=admin"
+        
+        # Connect to shard directly
+        shard_client = MongoClient(shard_uri)
+        
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+        
+        db_name = data.get("database")
+        coll_name = data.get("collection")
+        
+        if not db_name or not coll_name:
+            return jsonify({"error": "database and collection are required"}), 400
+        
+        collection = shard_client[db_name][coll_name]
+        
+        # Parse query parameters
+        filter_query = parse_json_extended(data.get("filter", {}))
+        projection = data.get("projection")
+        sort = data.get("sort")
+        limit = data.get("limit", 100)
+        skip = data.get("skip", 0)
+        
+        # Build cursor
+        cursor = collection.find(filter_query, projection)
+        
+        if sort:
+            cursor = cursor.sort(sort)
+        if skip:
+            cursor = cursor.skip(skip)
+        if limit:
+            cursor = cursor.limit(limit)
+        
+        # Execute and serialize
+        documents = list(cursor)
+        shard_client.close()
+        
+        return jsonify({
+            "shard": shard_id,
+            "database": db_name,
+            "collection": coll_name,
+            "count": len(documents),
+            "documents": serialize_response(documents)
+        })
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Query error: {str(e)}"}), 400
+
+
+@app.route("/shard/<shard_id>/databases", methods=["GET"])
+@require_api_key
+def list_shard_databases(shard_id):
+    """List databases on a specific shard."""
+    try:
+        client = get_client()
+        config_db = client["config"]
+        
+        shard = config_db["shards"].find_one({"_id": shard_id})
+        if not shard:
+            return jsonify({"error": f"Shard '{shard_id}' not found"}), 404
+        
+        host_str = shard.get("host", "")
+        
+        if "/" in host_str:
+            rs_name, hosts = host_str.split("/", 1)
+        else:
+            hosts = host_str
+        
+        first_host = hosts.split(",")[0]
+        
+        main_uri = MONGO_URI
+        shard_uri = f"mongodb://{first_host}/?directConnection=true&serverSelectionTimeoutMS=5000"
+        
+        if "@" in main_uri:
+            creds_part = main_uri.split("@")[0].replace("mongodb://", "")
+            shard_uri = f"mongodb://{creds_part}@{first_host}/?directConnection=true&serverSelectionTimeoutMS=5000&authSource=admin"
+        
+        shard_client = MongoClient(shard_uri)
+        
+        databases = []
+        for db_info in shard_client.list_databases():
+            databases.append({
+                "name": db_info["name"],
+                "sizeOnDisk": db_info.get("sizeOnDisk"),
+                "empty": db_info.get("empty", False)
+            })
+        
+        shard_client.close()
+        
+        return jsonify({
+            "shard": shard_id,
+            "databases": databases
+        })
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error: {str(e)}"}), 400
+
+
+@app.route("/shard/<shard_id>/databases/<db>/collections", methods=["GET"])
+@require_api_key
+def list_shard_collections(shard_id, db):
+    """List collections in a database on a specific shard."""
+    try:
+        client = get_client()
+        config_db = client["config"]
+        
+        shard = config_db["shards"].find_one({"_id": shard_id})
+        if not shard:
+            return jsonify({"error": f"Shard '{shard_id}' not found"}), 404
+        
+        host_str = shard.get("host", "")
+        
+        if "/" in host_str:
+            rs_name, hosts = host_str.split("/", 1)
+        else:
+            hosts = host_str
+        
+        first_host = hosts.split(",")[0]
+        
+        main_uri = MONGO_URI
+        shard_uri = f"mongodb://{first_host}/?directConnection=true&serverSelectionTimeoutMS=5000"
+        
+        if "@" in main_uri:
+            creds_part = main_uri.split("@")[0].replace("mongodb://", "")
+            shard_uri = f"mongodb://{creds_part}@{first_host}/?directConnection=true&serverSelectionTimeoutMS=5000&authSource=admin"
+        
+        shard_client = MongoClient(shard_uri)
+        database = shard_client[db]
+        
+        collections = []
+        for coll_name in database.list_collection_names():
+            try:
+                stats = database.command("collStats", coll_name)
+                collections.append({
+                    "name": coll_name,
+                    "count": stats.get("count", 0),
+                    "size": stats.get("size", 0)
+                })
+            except:
+                collections.append({"name": coll_name})
+        
+        shard_client.close()
+        
+        return jsonify({
+            "shard": shard_id,
+            "database": db,
+            "collections": collections
+        })
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error: {str(e)}"}), 400
+
+
 @app.route("/sample", methods=["POST"])
 @require_api_key  
 def sample():
