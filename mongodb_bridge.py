@@ -51,10 +51,10 @@ API_KEY = os.environ.get("API_KEY", None)
 if not API_KEY:
     API_KEY = secrets.token_urlsafe(32)
     print(f"\n{'='*60}")
-    print("⚠️  No API_KEY environment variable set!")
-    print(f"   Generated temporary API key:\n")
+    print("WARNING: No API_KEY environment variable set!")
+    print(f"Generated temporary API key:\n")
     print(f"   {API_KEY}")
-    print(f"\n   Set this in your environment for persistence:")
+    print(f"\nSet this in your environment for persistence:")
     print(f"   export API_KEY=\"{API_KEY}\"")
     print(f"{'='*60}\n")
 
@@ -548,10 +548,10 @@ if __name__ == "__main__":
     parser.add_argument("--key", default="key.pem", help="SSL key file")
     args = parser.parse_args()
     
-    print(f"\n🔗 MongoDB URI: {MONGO_URI}")
-    print(f"🌐 Starting server on {args.host}:{args.port}")
-    print(f"🔒 SSL: {'Enabled' if args.ssl else 'Disabled'}")
-    print(f"\n📝 Test connection:")
+    print(f"\nMongoDB URI: {MONGO_URI}")
+    print(f"Starting server on {args.host}:{args.port}")
+    print(f"SSL: {'Enabled' if args.ssl else 'Disabled'}")
+    print(f"\nTest connection:")
     print(f"   curl -H 'X-API-Key: {API_KEY}' http://{'localhost' if args.host == '0.0.0.0' else args.host}:{args.port}/databases\n")
     
     ssl_context = None
@@ -560,7 +560,7 @@ if __name__ == "__main__":
             ssl_context = (args.cert, args.key)
             print(f"   Using SSL cert: {args.cert}, key: {args.key}")
         except Exception as e:
-            print(f"⚠️  SSL setup failed: {e}")
+            print(f"WARNING: SSL setup failed: {e}")
             print("   Generate self-signed cert: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes")
             sys.exit(1)
     
